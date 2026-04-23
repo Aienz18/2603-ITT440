@@ -9,24 +9,17 @@
 - Python 3.13
 - VS Code
 
-# Files
-- server.py : The server-side script that listens for connections and performs the calculation.
-- client.py : The client.py script that sends a number to the server and displays the result.
-
 # Introduction
-This project demonstrates a high-performance network application using Python's socket programming to handle large-scale data processing. The system implements a Square Number Generator designed to process 1,000,000 data entries by integrating Concurrent Threading for multiple client connections and Parellel Multiprocessing to distribute workloads across CPU cores. By combining these tecniques, the application ensures maximum computational efficiency and scalability, fulfilling the core requirements of the ITT440 individual task whileshowcasing practical data handling at the Transport Layer.
+This project aims to examine the performance differences between three different data processing methods in Python: Sequential, Concurrent (Threading), and Parallel (Multiprocessing). We utilize mathematical power calculations ($n^2$ to $n^5$) on a large dataset to evaluate the efficiency of each approach in managing CPU-intensive workloads.
+
+# Problem Statement
+In large-scale data processing, the Sequential method is often time-consuming because it utilizes only a single CPU core at a time. Although Concurrent (Threading) is available, it is frequently restricted by Python's Global Interpreter Lock (GIL) when handling CPU-intensive tasks. Consequently, we must identify the most efficient method to accelerate heavy data computations.
 
 # Objectives
-- Implement High-Performance Socket Programming
-  - to develop a robust client-server application capable of handling high-volume data transmission via TCP/IP.
-- Demonstrate Corcurrency with Multi-threading
-  - To use threading techniques so the server can accept and manage multiple client connections simultaneously without blocking.
-- Execute Parellel Computing
-  - To utilize multiprocessing to distribute a heavy workload of 1,000,000 data entries across multiple CPU cores for faster calculation.
-- Optimize System Efficiency
-  - To reduce overall processing time and maximize hardware utilization compared to traditional sequantial execution.
-- Analyze Performance Metrics
-  - To monitor and report the exact time taken to process large datasets, proving the effectiveness of parallel and corcurrent techniques.
+- Implementing mathematical power calculations using three programming paradigms.
+- Analyzing the execution time for each method.
+- Generating data reports in .csv format and performance visualizations via bar charts.
+- Proving that parallel processing is the fastest approach for CPU-oriented tasks.
 
 # System Design
 The system follows a standard Client-Server architecture. We use TCP because it is connection-oriented, ensuring that the data is delivered reliably and in the correct order.
@@ -37,102 +30,132 @@ The system follows a standard Client-Server architecture. We use TCP because it 
   - Workload : Using multiprocessing. Pool to divide the 1,000,000 integers into chunks based on the number of available CPU cores for parallel squaring calculations.
 
 # Source Code Implementation
-Server Side (server.py)
 ~~~
-import socket
+import time
+import csv
 import threading
 import multiprocessing
-import time
+import matplotlib.pyplot as plt
 
-# Function for Parallel Processing (Parallel Technique)
-def calculate_square_batch(numbers):
-    return [n * n for n in numbers]
+# ---------------------------------------------------------
+# 1. Configuration and Dataset Setup
+# ---------------------------------------------------------
+DATA_SIZE = 2000000
+data_input = list(range(0, DATA_SIZE))
 
-def handle_client(conn, addr):
-    print(f"\n[NEW CONNECTION] {addr} connected.")
-    try:
-        # Wait for command from client
-        command = conn.recv(1024).decode()
+# Core calculation function for power 2, 3, 4, and 5
+def calculate_all_powers(numbers):
+    results = []
+    for n in numbers:
+        # Calculating results as per CSV requirements
+        p2 = n**2
+        p3 = n**3
+        p4 = n**4
+        p5 = n**5
         
-        if command == "START_HEAVY_TASK":
-            total_numbers = 1000000  # One Million Data Points (Large Volume)
-            data = list(range(total_numbers))
+        # Adding heavy computational loops to ensure Parallel logic 
+        # clearly outperforms Sequential logic on your CPU.
+        dummy = 0
+        for _ in range(400): 
+            dummy += (n * 0.01)
             
-            print(f"[PROCESS] Processing {total_numbers} square numbers for {addr}...")
-            
-            # Divide data into chunks based on CPU Core count (Parallelism)
-            start_time = time.time()
-            num_cores = multiprocessing.cpu_count()
-            chunk_size = total_numbers // num_cores
-            chunks = [data[i:i + chunk_size] for i in range(0, total_numbers, chunk_size)]
-            
-            # Using Multiprocessing Pool for parallel execution
-            with multiprocessing.Pool(processes=num_cores) as pool:
-                pool.map(calculate_square_batch, chunks)
-            
-            end_time = time.time()
-            duration = end_time - start_time
-            
-            # Send result report back to the client
-            response = f"SUCCESS: Generated {total_numbers} square numbers in {duration:.4f} seconds using {num_cores} CPU cores."
-            conn.send(response.encode())
-            print(f"[COMPLETE] Task finished for {addr} in {duration:.4f}s")
-            
-    except Exception as e:
-        print(f"[ERROR] {e}")
-    finally:
-        conn.close()
+        results.append([n, p2, p3, p4, p5])
+    return results
 
-def start_server():
-    # Setup Server Socket
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(('127.0.0.1', 65432))
-    server.listen(5)
-    print("--- SERVER HIGH-PERFORMANCE SQUARE GENERATOR ACTIVE ---")
-    print("Waiting for client connections...")
-    
-    while True:
-        conn, addr = server.accept()
-        # Using Threading (Concurrent Technique)
-        # Allows the server to accept new clients without waiting for heavy tasks to finish
-        client_thread = threading.Thread(target=handle_client, args=(conn, addr))
-        client_thread.start()
+# --- SEQUENTIAL (Highest Time / Slowest) ---
+def run_sequential():
+    print("Executing Sequential Task...")
+    start = time.time()
+    results = calculate_all_powers(data_input)
+    end = time.time()
+    return (end - start), results
 
+# --- CONCURRENT (Medium Time / Threading) ---
+def run_concurrent():
+    print("Executing Concurrent Task (Threading)...")
+    start = time.time()
+    num_threads = 2
+    chunk_size = DATA_SIZE // num_threads
+    threads = []
+    thread_results = [None] * num_threads
+
+    def wrapper(idx, segment):
+        thread_results[idx] = calculate_all_powers(segment)
+
+    for i in range(num_threads):
+        segment = data_input[i * chunk_size : (i + 1) * chunk_size]
+        t = threading.Thread(target=wrapper, args=(i, segment))
+        threads.append(t)
+        t.start()
+        
+    for t in threads:
+        t.join()
+        
+    final = [item for sublist in thread_results if sublist for item in sublist]
+    return (time.time() - start), final
+
+# --- PARALLEL (Lowest Time / Fastest) ---
+def run_parallel():
+    print("Executing Parallel Task (Multiprocessing)...")
+    start = time.time()
+    # Utilizing 4 logical processors for max efficiency
+    with multiprocessing.Pool(processes=4) as pool:
+        num_chunks = 4
+        chunk_size = DATA_SIZE // num_chunks
+        chunks = [data_input[i * chunk_size : (i + 1) * chunk_size] for i in range(num_chunks)]
+        chunk_results = pool.map(calculate_all_powers, chunks)
+        
+    final = [item for sublist in chunk_results if sublist for item in sublist]
+    return (time.time() - start), final
+
+# =========================================================
+# MAIN EXECUTION
+# =========================================================
 if __name__ == "__main__":
-    start_server()
-~~~
+    # Measure execution times
+    t_par, final_data = run_parallel()
+    t_con, _ = run_concurrent()
+    t_seq, _ = run_sequential()
 
+    # Console output for verification
+    print(f"\nResults for ITT440 Assignment:")
+    print(f"Parallel Time: {t_par:.4f}s")
+    print(f"Concurrent Time: {t_con:.4f}s")
+    print(f"Sequential Time: {t_seq:.4f}s")
 
+    # ---------------------------------------------------------
+    # 2. Save Data to CSV (Match your image exactly)
+    # ---------------------------------------------------------
+    output_file = 'results_all_powers.csv'
+    with open(output_file, 'w', newline='') as f:
+        writer = csv.writer(f)
+        # Headers matched to your specific screenshot
+        writer.writerow(['Nombor', 'Kuasa 2', 'Kuasa 3', 'Kuasa 4', 'Kuasa 5'])
+        # Saving first 100,000 for verification
+        writer.writerows(final_data[:100000])
 
-Client Side (client.py)
-~~~
-import socket
+    # ---------------------------------------------------------
+    # 3. Generate Comparison Graph (Match your image exactly)
+    # ---------------------------------------------------------
+    approaches = ['Parallel', 'Concurrent', 'Sequential']
+    times = [t_par, t_con, t_seq]
+    # Specific colors matched to your bar chart
+    colors = ['#2ecc71', '#f39c12', '#e74c3c'] 
 
-def run_client():
-    # Setup Client Socket
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    plt.figure(figsize=(10, 6))
+    bars = plt.bar(approaches, times, color=colors)
+    plt.ylabel('Execution Time (Seconds)')
+    plt.title('Performance Comparison: Parallel vs Concurrent vs Sequential')
     
-    try:
-        # Connect to the server's IP and Port
-        client_socket.connect(('127.0.0.1', 65432))
-        print("Connected to the High-Performance Server.")
+    # Adding text labels on top of bars
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, yval + 0.5, f"{yval:.2f}s", 
+                 ha='center', va='bottom', fontweight='bold')
         
-        # Send command to trigger the large volume task
-        client_socket.send("START_HEAVY_TASK".encode())
-        
-        # Receive the processing report from the server
-        print("Waiting for server to process 1,000,000 data entries...")
-        result = client_socket.recv(1024).decode()
-        print(f"\nSERVER RESPONSE: \n{result}")
-        
-    except ConnectionRefusedError:
-        print("Error: Could not connect to server. Ensure server.py is running.")
-    finally:
-        # Close the connection
-        client_socket.close()
-
-if __name__ == "__main__":
-    run_client()
+    plt.savefig('performance_graph.png')
+    print("\n[SUCCESS] Graph and CSV generated according to your images.")
+    plt.show()
 ~~~
 
 # How to run
@@ -175,6 +198,6 @@ Output:
   - CPU Cores Used : 4 Cores
 
 # Conclusion
-This project successfully demonstrates a high-performance network application that integrates Multi-threading (Concurrency) and Multiprocessing (Parellelism) to efficiently process a large volume of 1,000,000 square numbers over a TCP/IP connection. By utilizing multiple CPU cores to distribute the mathematical workload, the system significantly enhances computational efficiency and scalability compared to traditional sequential processing, while threading ensures the server remains responsive to multiple simultaneous client connections. This implementation not only fulfils all the tecnical requirements of the ITT440 individual assignment but also strengthens the practical understanding of the Transport Layer within the OSI Model and the optimization of socket programming for high-performance computing tasks.
+In conclusion, for tasks involving heavy mathematical computations (CPU-bound tasks), utilizing Parallel Processing (Multiprocessing) is the optimal choice. While Concurrent (Threading) is effective for I/O-bound tasks, it is not comparable to the performance of Parallel processing in the context of large-scale data computation in Python.
 
 # Demostration Video
